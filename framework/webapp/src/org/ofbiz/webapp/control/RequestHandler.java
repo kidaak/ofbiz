@@ -128,7 +128,7 @@ public class RequestHandler {
     public void doRequest(HttpServletRequest request, HttpServletResponse response, String chain,
             GenericValue userLogin, Delegator delegator) throws RequestHandlerException, RequestHandlerExceptionAllowExternalRequests {
 
-    	final boolean throwRequestHandlerExceptionOnMissingLocalRequest = EntityUtilProperties.propertyValueEqualsIgnoreCase(
+        final boolean throwRequestHandlerExceptionOnMissingLocalRequest = EntityUtilProperties.propertyValueEqualsIgnoreCase(
                 "requestHandler.properties", "throwRequestHandlerExceptionOnMissingLocalRequest", "Y", delegator);
         long startTime = System.currentTimeMillis();
         HttpSession session = request.getSession();
@@ -694,7 +694,7 @@ public class RequestHandler {
                     viewName = nextRequestResponse.value;
                 }
                 if (UtilValidate.isEmpty(viewName) && UtilValidate.isNotEmpty(nextRequestResponse.value)) {
-                	viewName = nextRequestResponse.value;
+                    viewName = nextRequestResponse.value;
                 }
                 if (urlParams != null) {
                     for (Map.Entry<String, Object> urlParamEntry: urlParams.entrySet()) {
@@ -984,6 +984,49 @@ public class RequestHandler {
            UtilHttp.setResponseBrowserProxyNoCache(resp);
            if (Debug.verboseOn()) Debug.logVerbose("Sending no-cache headers for view [" + nextPage + "]", module);
         }
+        
+        String xFrameOption = viewMap.xFrameOption;
+        // default to sameorigin
+        if (UtilValidate.isNotEmpty(xFrameOption)) {
+            resp.addHeader("x-frame-options", xFrameOption);
+        } else {
+            resp.addHeader("x-frame-options", "sameorigin");
+        }
+
+        String strictTransportSecurity = viewMap.strictTransportSecurity;
+        // default to "max-age=31536000; includeSubDomains" 31536000 secs = 1 year
+        if (UtilValidate.isNotEmpty(strictTransportSecurity)) {
+            if (!"none".equals(strictTransportSecurity)) {
+                resp.addHeader("strict-transport-security", strictTransportSecurity);
+            }
+        } else {
+            if (EntityUtilProperties.getPropertyAsBoolean("requestHandler", "strict-transport-security", true)) {
+                resp.addHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
+            }
+        }
+        
+        //The only x-content-type-options defined value, "nosniff", prevents Internet Explorer from MIME-sniffing a response away from the declared content-type. 
+        // This also applies to Google Chrome, when downloading extensions.
+        resp.addHeader("x-content-type-options", "nosniff");
+        
+        // This header enables the Cross-site scripting (XSS) filter built into most recent web browsers. 
+        // It's usually enabled by default anyway, so the role of this header is to re-enable the filter for this particular website if it was disabled by the user. 
+        // This header is supported in IE 8+, and in Chrome (not sure which versions). The anti-XSS filter was added in Chrome 4. Its unknown if that version honored this header.
+        // FireFox has still an open bug entry and "offers" only the noscript plugin
+        // https://wiki.mozilla.org/Security/Features/XSS_Filter 
+        // https://bugzilla.mozilla.org/show_bug.cgi?id=528661
+        resp.addHeader("X-XSS-Protection","1; mode=block"); 
+        
+        String setCookie = resp.getHeader("set-cookie");
+        if (UtilValidate.isNotEmpty(setCookie)) {
+            setCookie = setCookie.toLowerCase();
+            if (!setCookie.contains("secure")) {
+            resp.setHeader("set-cookie", setCookie + "; secure;"); // Adds a ";" trail to be sure to separate things
+            }
+            if (!setCookie.contains("httponly")) {
+                resp.setHeader("set-cookie", setCookie + "; httponly;"); // Adds a ";" trail to be sure to separate things
+            }
+        }
 
         try {
             if (Debug.verboseOn()) Debug.logVerbose("Rendering view [" + nextPage + "] of type [" + viewMap.type + "]", module);
@@ -1024,7 +1067,7 @@ public class RequestHandler {
      */
     @Deprecated
     public static String getDefaultServerRootUrl(HttpServletRequest request, boolean secure) {
-    	Delegator delegator = (Delegator) request.getAttribute("delegator");
+        Delegator delegator = (Delegator) request.getAttribute("delegator");
         String httpsPort = EntityUtilProperties.getPropertyValue("url", "port.https", "443", delegator);
         String httpsServer = EntityUtilProperties.getPropertyValue("url", "force.https.host", delegator);
         String httpPort = EntityUtilProperties.getPropertyValue("url", "port.http", "80", delegator);
